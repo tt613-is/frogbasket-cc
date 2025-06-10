@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frog Basketball</title>
+    <style>
+        :root {
+            --day-bg-gradient: linear-gradient(180deg, #87CEEB 0%, #98FB98 100%);
+            --day-container-bg: #f0f0f0;
+            --day-container-border: #ccc;
+            --day-text-color: #333;
+            --day-button-bg: #87CEEB;
+            --day-button-hover-bg: #76bfe0;
+            --day-canvas-border: #000;
+
+            --night-bg-gradient: linear-gradient(180deg, #000033 0%, #1a1a2e 100%);
+            --night-container-bg: #333;
+            --night-container-border: #000;
+            --night-text-color: white;
+            --night-button-bg: #4CAF50;
+            --night-button-hover-bg: #45a049;
+            --night-canvas-border: #000;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--night-bg-gradient);
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            transition: background 0.5s ease;
+        }
+
+        body.day-theme {
+            background: var(--day-bg-gradient);
+        }
+        
+        .game-container {
+            background: var(--night-container-bg);
+            border: 4px solid var(--night-container-border);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            transition: background-color 0.5s ease, border-color 0.5s ease;
+            position: relative;
+        }
+
+        body.day-theme .game-container {
+            background: var(--day-container-bg);
+            border-color: var(--day-container-border);
+        }
+        
+        #gameCanvas {
+            border: 2px solid var(--night-canvas-border);
+            display: block;
+        }
+
+        body.day-theme #gameCanvas {
+            border-color: var(--day-canvas-border);
+        }
+        
+        .ui {
+            text-align: center;
+            color: var(--night-text-color);
+            margin-top: 10px;
+            transition: color 0.5s ease;
+        }
+
+        body.day-theme .ui {
+            color: var(--day-text-color);
+        }
+        
+        .score {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .instructions {
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        
+        .game-over {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        button {
+            background: var(--night-button-bg);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            transition: background-color 0.3s ease;
+        }
+        
+        button:hover {
+            background: var(--night-button-hover-bg);
+        }
+
+        body.day-theme button {
+            background: var(--day-button-bg);
+            color: #000;
+        }
+
+        body.day-theme button:hover {
+            background: var(--day-button-hover-bg);
+        }
+
+        #themeSwitcher {
+            position: absolute;
+            bottom: 25px;
+            left: 25px;
+            z-index: 100;
+            font-size: 12px;
+            padding: 6px 12px;
+        }
+    </style>
+</head>
+<body class="day-theme">
+    <div class="game-container">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div class="ui">
+            <div class="score">Score: <span id="score">0</span></div>
+            <div class="instructions">
+                Use arrow keys or WASD to move the player, avoid defenders and reach the basket to score!
+            </div>
+        </div>
+        <div class="game-over" id="gameOver">
+            <h2 id="gameOverText">Game Over!</h2>
+            <p id="finalScore">Final Score: 0</p>
+            <button onclick="restartGame()">Restart Game</button>
+        </div>
+        <button id="themeSwitcher">切换主题</button>
+    </div>
+    
+    <script src="game.js"></script>
+    <script>
+        const themeSwitcher = document.getElementById('themeSwitcher');
+        themeSwitcher.addEventListener('click', () => {
+            document.body.classList.toggle('day-theme');
+            const currentTheme = document.body.classList.contains('day-theme') ? 'day' : 'night';
+            if (window.game) {
+                window.game.setTheme(currentTheme);
+            }
+        });
+    </script>
+</body>
+</html>
