@@ -25,6 +25,32 @@ class FrogBasketballGame {
             { y: 250, direction: 1, speed: 1.8 }  // 第三层防守队员
         ];
         
+        // --- Space 红色按钮设置 ---
+        const dashedY = this.lanes[this.lanes.length - 1].y - 25; // 最后一排虚线的 y
+        this.spaceButton = {
+            width: 80,
+            height: 30,
+            x: 0, // 将在 positionSpaceButton 中确定
+            y: dashedY - 15 // 让按钮中心对准虚线
+        };
+        this.spaceButtonSide = Math.random() < 0.5 ? 'left' : 'right';
+        this.spaceButtonTimer = 0; // 计时器(帧)
+        this.positionSpaceButton();
+        
+        // --- 投篮系统设置 ---
+        this.shootingPhase = null; // 投篮阶段: null | 'angle' | 'power'
+        this.aimAngle = 0; // 瞄准角度 (弧度)
+        this.aimSpeed = 0.05; // 角度变化速度
+        this.basketball = null; // 投出的篮球对象
+        this.shootingRange = Math.PI / 3; // 扇形范围 (60度)
+        
+        // 力度系统
+        this.powerIndicator = 0; // 力度指示器位置 (0-1)
+        this.powerSpeed = 0.02; // 力度指示器移动速度
+        this.powerDirection = 1; // 力度指示器移动方向
+        this.lockedAngle = 0; // 锁定的角度
+        this.maxPowerDistance = 100; // 力度指示器最大距离
+        
         // 玩家设置
         this.player = {
             x: this.width / 2,
@@ -301,14 +327,49 @@ class FrogBasketballGame {
     setupControls() {
         document.addEventListener('keydown', (e) => {
             this.keys[e.key] = true;
+            
+            // 空格键按下处理
+            if (e.key === ' ') {
+                if (this.shootingPhase === null && this.isPlayerInSpaceButtonArea()) {
+                    // 第一阶段：开始角度选择
+                    this.shootingPhase = 'angle';
+                    this.aimAngle = -this.shootingRange / 2; // 从左边开始
+                    e.preventDefault();
+                } else if (this.shootingPhase === 'power') {
+                    // 第三阶段：确认力度并投篮（瞄准过程中不受按钮位置影响）
+                    this.shoot();
+                    this.resetShooting();
+                    e.preventDefault();
+                }
+            }
         });
         
         document.addEventListener('keyup', (e) => {
             this.keys[e.key] = false;
+            
+            // 空格键松开处理
+            if (e.key === ' ' && this.shootingPhase === 'angle') {
+                // 第二阶段：锁定角度，开始力度选择
+                this.lockedAngle = this.aimAngle;
+                this.shootingPhase = 'power';
+                this.powerIndicator = 0;
+                e.preventDefault();
+            }
         });
     }
     
+    resetShooting() {
+        this.shootingPhase = null;
+        this.aimAngle = 0;
+        this.lockedAngle = 0;
+        this.powerIndicator = 0;
+        this.powerDirection = 1;
+    }
+    
     update() {
+        // 更新 Space 按钮计时器（即使游戏暂停也继续计时）
+        this.updateSpaceButton();
+
         if (!this.gameRunning && !this.isCelebrating) return;
         
         // 视觉效果在游戏运行或庆祝时持续更新
@@ -325,6 +386,9 @@ class FrogBasketballGame {
             this.checkCollisions();
             this.checkScoring();
         }
+        
+        // 更新投篮相关逻辑
+        this.updateShooting();
         
         this.animationFrame++;
     }
@@ -519,8 +583,14 @@ class FrogBasketballGame {
         // 绘制防守队员
         this.drawDefenders();
         
+        // 绘制 Space 按钮
+        this.drawSpaceButton();
+        
         // 绘制玩家
         this.drawPlayer();
+
+        // 绘制投篮瞄准指针和篮球
+        this.drawShooting();
         
         // 绘制粒子效果
         this.drawParticles();
@@ -982,6 +1052,15 @@ class FrogBasketballGame {
         
         // 重置观众
         this.audienceCheerTime = 0;
+        
+        // 重置 Space 按钮
+        this.spaceButtonTimer = 0;
+        this.spaceButtonSide = Math.random() < 0.5 ? 'left' : 'right';
+        this.positionSpaceButton();
+        
+        // 重置投篮系统
+        this.resetShooting();
+        this.basketball = null;
     }
     
     gameLoop() {
@@ -996,6 +1075,237 @@ class FrogBasketballGame {
         }
         
         requestAnimationFrame(() => this.gameLoop());
+    }
+
+    // --- Space 按钮：位置计算 ---
+    positionSpaceButton() {
+        const margin = 40;
+        const halfWidth = this.width / 2;
+        if (this.spaceButtonSide === 'left') {
+            this.spaceButton.x = margin + Math.random() * (halfWidth - this.spaceButton.width - margin * 2);
+        } else {
+            this.spaceButton.x = halfWidth + margin + Math.random() * (halfWidth - this.spaceButton.width - margin * 2);
+        }
+    }
+
+    // --- Space 按钮：计时与切换 ---
+    updateSpaceButton() {
+        this.spaceButtonTimer++;
+        const intervalFrames = 350; // 10秒 * 60fps
+        if (this.spaceButtonTimer >= intervalFrames) {
+            // 切换左右半区
+            this.spaceButtonSide = this.spaceButtonSide === 'left' ? 'right' : 'left';
+            this.positionSpaceButton();
+            this.spaceButtonTimer = 0;
+        }
+    }
+
+    // --- Space 按钮：绘制 ---
+    drawSpaceButton() {
+        const btn = this.spaceButton;
+        this.ctx.fillStyle = '#C62828'; // 红色
+        this.roundRect(btn.x, btn.y, btn.width, btn.height, 6);
+
+        this.ctx.fillStyle = '#FFFFFF';
+        this.ctx.font = 'bold 18px Arial';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText('Space', btn.x + btn.width / 2, btn.y + btn.height / 2);
+    }
+
+    // --- 投篮系统：检查玩家是否在Space按钮区域 ---
+    isPlayerInSpaceButtonArea() {
+        return this.isColliding(this.player, this.spaceButton);
+    }
+
+    // --- 投篮系统：更新投篮逻辑 ---
+    updateShooting() {
+        // 更新瞄准角度
+        if (this.shootingPhase === 'angle') {
+            this.aimAngle += this.aimSpeed;
+            // 在扇形范围内来回摆动
+            if (this.aimAngle > this.shootingRange / 2) {
+                this.aimAngle = this.shootingRange / 2;
+                this.aimSpeed = -this.aimSpeed;
+            } else if (this.aimAngle < -this.shootingRange / 2) {
+                this.aimAngle = -this.shootingRange / 2;
+                this.aimSpeed = -this.aimSpeed;
+            }
+        }
+        
+        // 更新力度指示器
+        if (this.shootingPhase === 'power') {
+            this.powerIndicator += this.powerSpeed * this.powerDirection;
+            // 在0-1范围内来回移动
+            if (this.powerIndicator >= 1) {
+                this.powerIndicator = 1;
+                this.powerDirection = -1;
+            } else if (this.powerIndicator <= 0) {
+                this.powerIndicator = 0;
+                this.powerDirection = 1;
+            }
+        }
+
+        // 更新篮球飞行
+        if (this.basketball) {
+            this.basketball.x += this.basketball.vx;
+            this.basketball.y += this.basketball.vy;
+            this.basketball.vy += 0.3; // 重力
+
+            // 检查篮球是否进筐
+            if (this.isBasketballInHoop()) {
+                this.score += 2;
+                document.getElementById('score').textContent = this.score;
+                this.createScoreEffect(this.basket.x + this.basket.width / 2, this.basket.y);
+                this.triggerAudienceCheer();
+                this.basketball = null;
+                
+                // 检查胜利条件
+                if (this.score >= this.winningScore) {
+                    this.isCelebrating = true;
+                    this.gameRunning = false;
+                    for(let i = 0; i < 5; i++) {
+                        setTimeout(() => this.createFireworks(), i * 400);
+                    }
+                    setTimeout(() => {
+                        this.winGame();
+                    }, 3000);
+                }
+            }
+            // 篮球飞出屏幕或落地则移除
+            else if (this.basketball.y > this.height || this.basketball.x < 0 || this.basketball.x > this.width) {
+                this.basketball = null;
+            }
+        }
+    }
+
+    // --- 投篮系统：投篮 ---
+    shoot() {
+        const basketCenterX = this.basket.x + this.basket.width / 2;
+        const basketCenterY = this.basket.y;
+        const playerCenterX = this.player.x + this.player.width / 2;
+        const playerCenterY = this.player.y + this.player.height / 2;
+
+        // 使用锁定的角度
+        const baseAngle = Math.atan2(basketCenterY - playerCenterY, basketCenterX - playerCenterX);
+        const finalAngle = baseAngle + this.lockedAngle;
+        
+        // 根据力度指示器计算力度 (0.3-1.0 的范围，避免力度太小)
+        const powerMultiplier = 0.3 + this.powerIndicator * 0.7;
+        const basePower = 8; // 基础力度
+        const power = basePower * powerMultiplier;
+        
+        this.basketball = {
+            x: playerCenterX,
+            y: playerCenterY,
+            vx: Math.cos(finalAngle) * power,
+            vy: Math.sin(finalAngle) * power - 5, // 向上的初始速度
+            size: 8
+        };
+    }
+
+    // --- 投篮系统：检查篮球是否进筐 ---
+    isBasketballInHoop() {
+        if (!this.basketball) return false;
+        
+        const hoopCenterX = this.basket.x + this.basket.width / 2;
+        const hoopCenterY = this.basket.y;
+        const distance = Math.sqrt(
+            Math.pow(this.basketball.x - hoopCenterX, 2) + 
+            Math.pow(this.basketball.y - hoopCenterY, 2)
+        );
+        
+        return distance < 25 && this.basketball.vy > 0; // 篮球必须向下运动才能进筐
+    }
+
+    // 绘制投篮瞄准指针和篮球
+    drawShooting() {
+        const playerCenterX = this.player.x + this.player.width / 2;
+        const playerCenterY = this.player.y + this.player.height / 2;
+        const basketCenterX = this.basket.x + this.basket.width / 2;
+        const basketCenterY = this.basket.y;
+        
+        // 角度选择阶段
+        if (this.shootingPhase === 'angle') {
+            // 绘制扇形瞄准区域
+            this.ctx.save();
+            this.ctx.globalAlpha = 0.3;
+            this.ctx.fillStyle = '#FFD700';
+            this.ctx.beginPath();
+            this.ctx.moveTo(playerCenterX, playerCenterY);
+            this.ctx.arc(playerCenterX, playerCenterY, 100, 
+                Math.atan2(basketCenterY - playerCenterY, basketCenterX - playerCenterX) - this.shootingRange / 2,
+                Math.atan2(basketCenterY - playerCenterY, basketCenterX - playerCenterX) + this.shootingRange / 2);
+            this.ctx.closePath();
+            this.ctx.fill();
+            this.ctx.restore();
+
+            // 绘制摆动的瞄准线
+            const aimDirection = Math.atan2(basketCenterY - playerCenterY, basketCenterX - playerCenterX) + this.aimAngle;
+            const aimEndX = playerCenterX + Math.cos(aimDirection) * 100;
+            const aimEndY = playerCenterY + Math.sin(aimDirection) * 100;
+            
+            this.ctx.strokeStyle = '#FF0000';
+            this.ctx.lineWidth = 3;
+            this.ctx.beginPath();
+            this.ctx.moveTo(playerCenterX, playerCenterY);
+            this.ctx.lineTo(aimEndX, aimEndY);
+            this.ctx.stroke();
+        }
+        
+        // 力度选择阶段
+        if (this.shootingPhase === 'power') {
+            // 绘制锁定的瞄准线
+            const lockedDirection = Math.atan2(basketCenterY - playerCenterY, basketCenterX - playerCenterX) + this.lockedAngle;
+            const aimEndX = playerCenterX + Math.cos(lockedDirection) * this.maxPowerDistance;
+            const aimEndY = playerCenterY + Math.sin(lockedDirection) * this.maxPowerDistance;
+            
+            this.ctx.strokeStyle = '#FF0000';
+            this.ctx.lineWidth = 3;
+            this.ctx.beginPath();
+            this.ctx.moveTo(playerCenterX, playerCenterY);
+            this.ctx.lineTo(aimEndX, aimEndY);
+            this.ctx.stroke();
+            
+            // 绘制力度指示器
+            const powerX = playerCenterX + Math.cos(lockedDirection) * this.powerIndicator * this.maxPowerDistance;
+            const powerY = playerCenterY + Math.sin(lockedDirection) * this.powerIndicator * this.maxPowerDistance;
+            
+            // 力度指示器颜色随力度变化：绿色->黄色->红色
+            let powerColor;
+            if (this.powerIndicator < 0.5) {
+                // 绿色到黄色
+                const ratio = this.powerIndicator * 2;
+                powerColor = `rgb(${Math.floor(255 * ratio)}, 255, 0)`;
+            } else {
+                // 黄色到红色
+                const ratio = (this.powerIndicator - 0.5) * 2;
+                powerColor = `rgb(255, ${Math.floor(255 * (1 - ratio))}, 0)`;
+            }
+            
+            this.ctx.fillStyle = powerColor;
+            this.ctx.shadowColor = powerColor;
+            this.ctx.shadowBlur = 10;
+            this.ctx.beginPath();
+            this.ctx.arc(powerX, powerY, 8, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.shadowBlur = 0;
+        }
+
+        // 绘制飞行中的篮球
+        if (this.basketball) {
+            this.ctx.fillStyle = '#FF8C00';
+            this.ctx.beginPath();
+            this.ctx.arc(this.basketball.x, this.basketball.y, this.basketball.size, 0, Math.PI * 2);
+            this.ctx.fill();
+
+            // 篮球纹理
+            this.ctx.strokeStyle = '#000000';
+            this.ctx.lineWidth = 1;
+            this.ctx.beginPath();
+            this.ctx.arc(this.basketball.x, this.basketball.y, this.basketball.size, 0, Math.PI * 2);
+            this.ctx.stroke();
+        }
     }
 }
 
